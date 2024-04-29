@@ -4,22 +4,26 @@ class PlayerModel {
   final String id;
   final String name;
   final int count;
+  final bool isChampion;
 
   PlayerModel({
     required this.id,
     required this.name,
     required this.count,
+    required this.isChampion,
   });
 
   PlayerModel copyWith({
     String? id,
     String? name,
     int? count,
+    bool? isChampion,
   }) {
     return PlayerModel(
       id: id ?? this.id,
       name: name ?? this.name,
       count: count ?? this.count,
+      isChampion: isChampion ?? this.isChampion,
     );
   }
 
@@ -28,6 +32,7 @@ class PlayerModel {
       'id': id,
       'name': name,
       'count': count,
+      'isChampion': isChampion,
     };
   }
 
@@ -36,6 +41,7 @@ class PlayerModel {
       id: map['id'] as String,
       name: map['name'] as String,
       count: map['count'] as int,
+      isChampion: map['isChampion'] as bool? ?? false,
     );
   }
 
@@ -45,15 +51,22 @@ class PlayerModel {
       PlayerModel.fromMap(json.decode(source) as Map<String, dynamic>);
 
   @override
-  String toString() => 'PlayerModel(id: $id, name: $name, count: $count)';
+  String toString() {
+    return 'PlayerModel(id: $id, name: $name, count: $count, isChampion: $isChampion)';
+  }
 
   @override
   bool operator ==(covariant PlayerModel other) {
     if (identical(this, other)) return true;
 
-    return other.id == id && other.name == name && other.count == count;
+    return other.id == id &&
+        other.name == name &&
+        other.count == count &&
+        other.isChampion == isChampion;
   }
 
   @override
-  int get hashCode => id.hashCode ^ name.hashCode ^ count.hashCode;
+  int get hashCode {
+    return id.hashCode ^ name.hashCode ^ count.hashCode ^ isChampion.hashCode;
+  }
 }

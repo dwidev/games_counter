@@ -5,6 +5,7 @@ import 'package:confetti/confetti.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
+import 'package:games_counter/add_with_history_player_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'context_ext.dart';
@@ -12,6 +13,8 @@ import 'member_model.dart';
 
 class PlayersListPage extends StatefulWidget {
   const PlayersListPage({super.key});
+
+  static const keyPlayerGames = "games-player";
 
   @override
   State<PlayersListPage> createState() => _PlayersListPageState();
@@ -22,8 +25,6 @@ class _PlayersListPageState extends State<PlayersListPage> {
   late ConfettiController confettiController;
 
   final players = <PlayerModel>[];
-
-  static const key = "game";
 
   @override
   void initState() {
@@ -50,16 +51,14 @@ class _PlayersListPageState extends State<PlayersListPage> {
   }
 
   Future<void> saveTheGame() async {
-    print("SAVE THE GAME");
     final pref = await SharedPreferences.getInstance();
     final jsonData = jsonEncode(players.map((e) => e.toJson()).toList());
-    print(jsonData);
-    await pref.setString(key, jsonData);
+    await pref.setString(PlayersListPage.keyPlayerGames, jsonData);
   }
 
   Future<void> continueTheGame() async {
     final pref = await SharedPreferences.getInstance();
-    final jsonGame = pref.getString(key) ?? "";
+    final jsonGame = pref.getString(PlayersListPage.keyPlayerGames) ?? "";
     if (jsonGame.isNotEmpty) {
       final model = jsonDecode(jsonGame) as List;
       if (model.isEmpty) return;
@@ -74,6 +73,20 @@ class _PlayersListPageState extends State<PlayersListPage> {
           Navigator.pop(context);
         },
       );
+    }
+  }
+
+  Future<void> runTheGame() async {
+    players.clear();
+    final pref = await SharedPreferences.getInstance();
+    final jsonGame = pref.getString(PlayersListPage.keyPlayerGames) ?? "";
+    if (jsonGame.isNotEmpty) {
+      final model = jsonDecode(jsonGame) as List;
+      if (model.isEmpty) return;
+      final res = model.map((e) => PlayerModel.fromJson(e)).toList();
+      setState(() {
+        players.addAll(res);
+      });
     }
   }
 
@@ -103,9 +116,33 @@ class _PlayersListPageState extends State<PlayersListPage> {
   void increment(String playerId) {
     final player = players.where((e) => e.id == playerId).first;
     final index = players.indexWhere((element) => element.id == playerId);
-    final updated = player.copyWith(count: player.count + 1);
+    var updated = player.copyWith(count: player.count + 1);
+
+    if (updated.count >= 10) {
+      updated = updated.copyWith(isChampion: true);
+      players.replaceRange(index, index + 1, [updated]);
+      finishToChampion(updated);
+      return;
+    }
+
     players.replaceRange(index, index + 1, [updated]);
     setState(() {});
+  }
+
+  void finishToChampion(PlayerModel champion) {
+    confettiController.play();
+    final newPlayers = <PlayerModel>[];
+    for (var player in players) {
+      if (champion.id != player.id) {
+        player = player.copyWith(isChampion: false);
+      }
+
+      newPlayers.add(player.copyWith(count: 0));
+    }
+    setState(() {
+      players.clear();
+      players.addAll(newPlayers);
+    });
   }
 
   void decrement(String playerId) {
@@ -140,15 +177,41 @@ class _PlayersListPageState extends State<PlayersListPage> {
     return path;
   }
 
+  Future<void> endGame() async {
+    players.clear();
+    final pref = await SharedPreferences.getInstance();
+    await pref.remove(PlayersListPage.keyPlayerGames);
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Games counter"),
+        actions: [
+          TextButton(
+            onPressed: () {
+              confirmEndGame(
+                context,
+                onEndGame: () async {
+                  endGame();
+                },
+              );
+            },
+            child: Text("End"),
+          )
+        ],
       ),
       floatingActionButton: ElevatedButton(
           onPressed: () {
-            addPlayerDialog(context, onAdd: onAddMember);
+            Navigator.push(context, MaterialPageRoute(
+              builder: (context) {
+                return AddWithHistoryPlayerPage();
+              },
+            )).then((value) {
+              runTheGame();
+            });
           },
           child: const Row(
             mainAxisSize: MainAxisSize.min,
@@ -189,19 +252,19 @@ class _PlayersListPageState extends State<PlayersListPage> {
                       endActionPane: ActionPane(
                         motion: const DrawerMotion(),
                         children: [
-                          SlidableAction(
-                            onPressed: (context) {
-                              addPlayerDialog(
-                                context,
-                                onAdd: onAddMember,
-                                updatedPlayer: player,
-                              );
-                            },
-                            backgroundColor: Colors.blueAccent.shade100,
-                            foregroundColor: Colors.white,
-                            icon: CupertinoIcons.pencil,
-                            label: 'Update',
-                          ),
+                          // SlidableAction(
+                          //   onPressed: (context) {
+                          //     addPlayerDialog(
+                          //       context,
+                          //       onAdd: onAddMember,
+                          //       updatedPlayer: player,
+                          //     );
+                          //   },
+                          //   backgroundColor: Colors.blueAccent.shade100,
+                          //   foregroundColor: Colors.white,
+                          //   icon: CupertinoIcons.pencil,
+                          //   label: 'Update',
+                          // ),
                           SlidableAction(
                             onPressed: (context) => boom(player.id),
                             backgroundColor: Colors.red.shade500,
@@ -215,7 +278,8 @@ class _PlayersListPageState extends State<PlayersListPage> {
                         title: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(player.name),
+                            Text(
+                                "${player.name} ${player.isChampion ? '👑' : ''} "),
                             Row(
                               children: [
                                 SizedBox(
@@ -370,6 +434,7 @@ class _NewPlayerFormState extends State<NewPlayerForm> {
                     playerModel = player.copyWith(name: playerName);
                   } else {
                     playerModel = PlayerModel(
+                      isChampion: false,
                       id: "",
                       name: playerName,
                       count: 0,
@@ -448,6 +513,82 @@ Future<void> continueGame(
                     "new game",
                     style: context.textTheme.bodyMedium?.copyWith(
                       color: Colors.redAccent.shade200,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+Future<void> confirmEndGame(
+  BuildContext context, {
+  required Future<void> Function() onEndGame,
+}) async {
+  await showGeneralDialog(
+    barrierDismissible: true,
+    barrierLabel: 'Exit',
+    context: context,
+    pageBuilder: (context, a, s) {
+      return Material(
+        type: MaterialType.transparency,
+        child: Center(
+          child: Container(
+            width: context.width / 1.5,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(15),
+              color: Colors.white,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  "End game?",
+                  textAlign: TextAlign.center,
+                  style: context.textTheme.bodyLarge?.copyWith(
+                    color: Colors.black,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  "The current data game will removed when you pressed the End button",
+                  textAlign: TextAlign.center,
+                  style: context.textTheme.bodySmall?.copyWith(
+                    color: Colors.black,
+                  ),
+                ),
+                const SizedBox(height: 25),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.redAccent.shade400,
+                  ),
+                  onPressed: () async {
+                    await onEndGame();
+                    Navigator.pop(context);
+                  },
+                  child: Text(
+                    "End!",
+                    style: context.textTheme.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                GestureDetector(
+                  onTap: () async {
+                    Navigator.pop(context);
+                  },
+                  child: Text(
+                    "Cancel",
+                    style: context.textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
                   ),
